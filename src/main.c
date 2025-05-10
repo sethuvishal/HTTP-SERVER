@@ -174,9 +174,8 @@ int main() {
   if (server_fd == -1) {
     printf("Socket creation failed: %s...\n", strerror(errno));
     return 1;
-  }
-  // Since the tester restarts your program quite often, setting REUSE_PORT
-  // ensures that we don't run into 'Address already in use' errors
+  } 
+  // setting REUSE_PORT ensures that we don't run into 'Address already in use' errors
   int reuse = 1;
   if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) <
       0) {
