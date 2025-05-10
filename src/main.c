@@ -109,31 +109,31 @@ int parse_request(char *buf, struct request *req) {
   line = strtok_r(buf, newline_char, &save_line);
   if (!line || try_parse_field(line, space_char, &req->path, 2)) {
     printf("Failed to parse request path");
-    goto exit;
+    return rc;
   }
   /* parse http version */
   if (!line || try_parse_field(line, space_char, &req->http_version, 3)) {
     printf("Failed to parse request http version");
-    goto exit;
+    return rc;
   }
   /* parse host */
   line = strtok_r(save_line, newline_char, &save_line);
   if (!line || try_parse_field(line, space_char, &req->host, 2)) {
     printf("Failed to parse request host");
-    goto exit;
+    return rc;
   }
   /* parse user agent */
   line = strtok_r(save_line, newline_char, &save_line);
   if (!line || try_parse_field(line, space_char, &req->agent, 2)) {
     printf("Failed to parse request user agent");
-    goto exit;
+    return rc;
   }
   /* parse content */
   char *content_ptr = save_line + 2;
   req->content = strdup(content_ptr);
   if (!req->content) {
     printf("Failed to parse content");
-    goto exit;
+    return rc;
   }
   rc = 0;
 exit:
