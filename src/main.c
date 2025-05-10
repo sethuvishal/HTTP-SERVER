@@ -103,41 +103,37 @@ int try_parse_field(char *buf, char *delim, char **out, int fnum) {
 int parse_request(char *buf, struct request *req) {
   char *save_line, *line, *field;
   int cntr;
-  int rc = 1;
   memset(req, 0, sizeof(struct request));
   /* parse path */
   line = strtok_r(buf, newline_char, &save_line);
   if (!line || try_parse_field(line, space_char, &req->path, 2)) {
     printf("Failed to parse request path");
-    return rc;
+    return 0;
   }
   /* parse http version */
   if (!line || try_parse_field(line, space_char, &req->http_version, 3)) {
     printf("Failed to parse request http version");
-    return rc;
+    return 0;
   }
   /* parse host */
   line = strtok_r(save_line, newline_char, &save_line);
   if (!line || try_parse_field(line, space_char, &req->host, 2)) {
     printf("Failed to parse request host");
-    return rc;
+	return 0;
   }
   /* parse user agent */
   line = strtok_r(save_line, newline_char, &save_line);
   if (!line || try_parse_field(line, space_char, &req->agent, 2)) {
     printf("Failed to parse request user agent");
-    return rc;
+	return 0;
   }
   /* parse content */
   char *content_ptr = save_line + 2;
   req->content = strdup(content_ptr);
   if (!req->content) {
     printf("Failed to parse content");
-    return rc;
   }
-  rc = 0;
-exit:
-  return rc;
+  return 0;
 }
 int serialize_response(struct response *resp, char *buf, int size) {
   int index = 0;
