@@ -201,6 +201,12 @@ int main() {
 	/* if any client desires to connect -- accept */
 	client_fd =
 		accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
+	size_t main_pid = getpid();
+	size_t pid = fork();
+	if (pid != 0) {
+		close(client_fd);
+		continue;
+	}
 	if (client_fd == -1) {
 		printf("Failed to connect to client: %s\n", strerror(errno));
 	}
@@ -247,9 +253,12 @@ int main() {
 		continue;
 	}
 	printf("Response sent!\n");
+	free_req(req);
+	free_resp(resp);
+	if(getpid() != main_pid){
+		exit(0);
+	}
   }
   close(server_fd);
-  free_req(req);
-  free_resp(resp);
   return 0;
 }
