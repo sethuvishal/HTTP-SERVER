@@ -2,11 +2,13 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <stdio.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#define RECV_BUFFER_SIZE 1024
+#include <stdlib.h>
+#define RECV_BUFFER_SIZE 10000
 typedef enum {
   R_HTTP_OK = 0,
   R_NOT_FOUND,
@@ -34,7 +36,7 @@ char *server_status_responses[R_COUNT] = {
     [R_HTTP_OK] = "HTTP/1.1 200 OK",
     [R_NOT_FOUND] = "HTTP/1.1 404 Not Found",
 };
-char *server_content_types[R_COUNT] = {
+char *server_content_types[CT_COUNT] = {
     [CT_TEXT_PLAIN] = "text/plain",
 };
 char *newline_char = "\r\n";
@@ -242,7 +244,51 @@ int main() {
 		resp->status = R_HTTP_OK;
 		resp->content = strdup(req->agent);
 		resp->type = CT_TEXT_PLAIN;
-	} else {
+	} else if (strncmp(req->path, "/files/", 7) == 0) {
+    char *prefix = "/files/";
+
+    char *filename = &req->path[strlen(prefix)];
+    if(filename == NULL){
+      resp->status = R_NOT_FOUND;
+      resp->content = prefix;
+      resp->type = CT_TEXT_PLAIN;
+    }else {
+      char cwd[PATH_MAX];
+      char fullpath[PATH_MAX];
+      if(getcwd(cwd, sizeof(cwd)) == NULL){
+        resp->status = R_NOT_FOUND;
+        resp->content = "Something went wrong!";
+        resp->type = CT_TEXT_PLAIN;
+      }else {
+        snprintf(fullpath, sizeof(fullpath), "%s/%s", cwd, filename);
+        // Check if file exists
+        printf("Full Filepath: %s\n", fullpath);
+        if (access(fullpath, F_OK) != 0) {
+            printf("File not found\n");
+            resp->status = R_NOT_FOUND;
+            resp->content = "File not found";
+            resp->type = CT_TEXT_PLAIN;
+        }else {
+          printf("File Found\n");
+          FILE *fp = fopen(fullpath, "r");
+          fseek(fp, 0, SEEK_END);
+          long filesize = ftell(fp);
+          printf("FIle Size %d\n", filesize);
+          rewind(fp);
+
+          char *file_contents = malloc(filesize + 1);
+
+          fread(file_contents, 1, filesize, fp);
+          file_contents[filesize] = '\0';
+
+          fclose(fp);
+          resp->status = R_HTTP_OK;
+          resp->content = file_contents;
+          resp->type = CT_TEXT_PLAIN;
+        }
+      }
+    }
+  }else {
 		resp->status = R_NOT_FOUND;
 	}
 	if (serialize_response(resp, recv_buffer, RECV_BUFFER_SIZE)) {
