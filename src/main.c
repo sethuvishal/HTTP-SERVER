@@ -31,6 +31,8 @@ struct request {
 struct response {
   resp_status_e status;
   content_type_e type;
+  int has_content_length;
+  long content_length;
   char *content;
 };
 char *server_status_responses[R_COUNT] = {
@@ -44,6 +46,7 @@ char *server_content_types[CT_COUNT] = {
 char *newline_char = "\r\n";
 char *space_char = " ";
 char *slash_char = "/";
+// request handlers
 void free_req(struct request *req) {
   if (req->path)
     free(req->path);
@@ -57,11 +60,7 @@ void free_req(struct request *req) {
     free(req->content);
   free(req);
 }
-void free_resp(struct response *resp) {
-  if (resp->content)
-    free(resp->content);
-  free(resp);
-}
+
 void print_request(struct request *req) {
   printf("Request object:\n");
   printf("\t path: %s\n", req->path);
@@ -70,20 +69,7 @@ void print_request(struct request *req) {
   printf("\t agent: %s\n", req->agent);
   printf("\t content: %s\n", req->content);
 }
-int send_response(int cfd, char *resp) {
-  ssize_t resp_len, sent_bytes, remaining;
-  resp_len = strlen(resp);
-  remaining = resp_len;
-  while (remaining) {
-    sent_bytes = send(cfd, &resp[resp_len - remaining], remaining, 0);
-    if (sent_bytes < 0) {
-      printf("Failed to send response to client : %s\n", strerror(errno));
-      break;
-    }
-    remaining -= sent_bytes;
-  }
-  return (remaining != 0);
-}
+
 int try_parse_field(char *buf, char *delim, char **out, int fnum) {
   int token_count = 0, rc = 1;
   char *field;
@@ -139,20 +125,110 @@ int parse_request(char *buf, struct request *req) {
   }
   return 0;
 }
-int serialize_response(struct response *resp, char *buf, int size) {
-  int index = 0;
-  index += snprintf(buf, size - index, "%s\r\n",
-                    server_status_responses[resp->status]);
-  if (resp->content) {
-    index += snprintf(&buf[index], size - index, "Content-Type: %s\r\n",
-                      server_content_types[resp->type]);
-    index += snprintf(&buf[index], size - index, "Content-Length: %ld\r\n\r\n",
-                      strlen(resp->content));
-    index += snprintf(&buf[index], size - index, "%s\r\n", resp->content);
-  } else {
-    index += snprintf(&buf[index], size - index, "\r\n");
+
+// response handlers
+typedef int (*stream_callback)(int cfd);
+void free_resp(struct response *resp) {
+  if (resp->content)
+    free(resp->content);
+  free(resp);
+}
+
+int send_all(int cfd, const char *data, size_t len) {
+  ssize_t sent_bytes, remaining = len;
+  while (remaining) {
+    sent_bytes = send(cfd, data + (len - remaining), remaining, 0);
+    if (sent_bytes < 0) {
+      perror("send");
+      return -1;
+    }
+    remaining -= sent_bytes;
   }
   return 0;
+}
+
+int serialize_response(struct response *resp, char *buf, int size) {
+  if(resp->content != NULL){
+    resp->has_content_length = 1;
+    resp->content_length = strlen(resp->content);
+  }
+  int index = 0;
+  index += snprintf(buf, size - index, "%s\r\n", server_status_responses[resp->status]);
+
+  if (resp->has_content_length) {
+    index += snprintf(&buf[index], size - index, "Content-Type: %s\r\n",
+                      server_content_types[resp->type]);
+    index += snprintf(&buf[index], size - index, "Content-Length: %ld\r\n", resp->content_length);
+  } else {
+    index += snprintf(&buf[index], size - index, "Transfer-Encoding: chunked\r\n");
+  }
+
+  index += snprintf(&buf[index], size - index, "\r\n");
+  return index;
+}
+
+int send_response(int cfd, struct response *resp, int src_fd) {
+  char header_buf[1024];
+  printf("Sending Response \n");
+  int header_len = serialize_response(resp, header_buf, sizeof(header_buf));
+  printf("Header Length: %d", header_len);
+  if (header_len < 0) return -1;
+  printf("Headers Serealized");
+  // Send headers
+  if (send_all(cfd, header_buf, header_len) != 0) {
+    fprintf(stderr, "Failed to send headers\n");
+    return -1;
+  }
+
+  if(resp->content){
+    send_all(cfd, resp->content, strlen(resp->content));
+  }
+
+  // Stream body (if present)
+  if(src_fd == 0) return 0;
+
+  if (stream_fd_to_client(src_fd, cfd) != 0) {
+    fprintf(stderr, "Failed to stream response body\n");
+    return -1;
+  }
+
+  return 0;
+}
+
+int stream_fd_to_client(int src_fd, int cfd) {
+  char buffer[4096];
+  ssize_t n_read, n_sent;
+
+  while ((n_read = read(src_fd, buffer, sizeof(buffer))) > 0) {
+    ssize_t total_sent = 0;
+    while (total_sent < n_read) {
+      n_sent = send(cfd, buffer + total_sent, n_read - total_sent, 0);
+      if (n_sent < 0) {
+        perror("send");
+        return -1;
+      }
+      total_sent += n_sent;
+    }
+  }
+
+  if (n_read < 0) {
+    perror("read");
+    return -1;
+  }
+
+  return 0;
+}
+
+int get_file_fd(char* filename) {
+  FILE *fp = fopen(filename, "r");
+  if (fp == NULL) {
+      perror("fopen");
+      return -1; // indicate error
+  }
+
+  int fd = fileno(fp);
+  
+  return fd;
 }
 
 struct response* echo_handler(struct request* req){
@@ -175,11 +251,9 @@ struct response* echo_handler(struct request* req){
 
 struct response* serve_file(struct request* req){
   char *prefix = "/files/";
-  printf("Here!\n");
   char *filename = &req->path[strlen(prefix)];
-  printf("Request Path %s\n", filename);
   struct response* resp = malloc(sizeof(struct response));
-  printf("Here!!!");
+
   if(filename == NULL){
     resp->status = R_NOT_FOUND;
     resp->content = prefix;
@@ -188,7 +262,7 @@ struct response* serve_file(struct request* req){
   }
   char cwd[PATH_MAX];
   char fullpath[PATH_MAX];
-  printf("Nothing went wrong!");
+
   if(getcwd(cwd, sizeof(cwd)) == NULL){
     resp->status = R_NOT_FOUND;
     resp->content = "Something went wrong!";
@@ -208,16 +282,12 @@ struct response* serve_file(struct request* req){
   FILE *fp = fopen(fullpath, "r");
   fseek(fp, 0, SEEK_END);
   long filesize = ftell(fp);
-  rewind(fp);
-  char *file_contents = malloc(filesize + 1);
-
-  fread(file_contents, 1, filesize, fp);
-  file_contents[filesize] = '\0';
-
   fclose(fp);
   resp->status = R_HTTP_OK;
-  resp->content = file_contents;
   resp->type = CT_TEXT_PLAIN;
+  resp->has_content_length = 1;
+  resp->content_length = filesize;
+  resp->content = NULL;
 
   return resp;
 }
@@ -294,28 +364,32 @@ int main() {
     memset(resp, 0, sizeof(struct response));
     if (strcmp(req->path, "/") == 0) {
       resp->status = R_HTTP_OK;
+      send_response(client_fd, resp, NULL);
     } else if (strstr(req->path, "echo")) {
       resp = echo_handler(req);
+      send_response(client_fd, resp, NULL);
     } else if (strcmp(req->path, "/user-agent") == 0) {
       resp->status = R_HTTP_OK;
       resp->content = strdup(req->agent);
       resp->type = CT_TEXT_PLAIN;
+      send_response(client_fd, resp, NULL);
     } else if (strncmp(req->path, "/files/", 7) == 0) {
-      printf("Here");
       resp = serve_file(req);
+      if(resp->status == R_HTTP_OK){
+        int fd = get_file_fd(&req->path[strlen("/files/")]);
+        send_response(client_fd, resp, fd == -1 ? 0 : fd);
+      }else{
+        send_response(client_fd, resp, 0);
+      }
     }else {
       resp->status = R_NOT_FOUND;
     }
-    if (serialize_response(resp, recv_buffer, RECV_BUFFER_SIZE)) {
-      continue;
-    }
 
-    if (send_response(client_fd, recv_buffer)) {
-      continue;
-    }
     printf("Response sent!\n");
     free_req(req);
+    printf("request cleared\n");
     free_resp(resp);
+    printf("response cleared\n");
     if(getpid() != main_pid){
       exit(0);
     }
