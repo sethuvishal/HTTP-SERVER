@@ -196,58 +196,58 @@ int main() {
     return 1;
   }
   printf("Waiting for a client to connect...\n");
-  client_addr_len = sizeof(client_addr);
-  /* if any client desires to connect -- accept */
-  client_fd =
-      accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
-  if (client_fd == -1) {
-    printf("Failed to connect to client: %s\n", strerror(errno));
-    return 1;
+  while(1){
+	client_addr_len = sizeof(client_addr);
+	/* if any client desires to connect -- accept */
+	client_fd =
+		accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
+	if (client_fd == -1) {
+		printf("Failed to connect to client: %s\n", strerror(errno));
+	}
+	printf("Client connected\n");
+	/* get any client data */
+	recv_len = recv(client_fd, recv_buffer, RECV_BUFFER_SIZE, 0);
+	printf("Got this from the client:\n%s\n", recv_buffer);
+	/* parse client request */
+	if (parse_request(recv_buffer, req)) {
+		printf("Failed to parse the client request\n");
+	}
+	print_request(req);
+	/* respond to the request */
+	memset(resp, 0, sizeof(struct response));
+	if (strcmp(req->path, "/") == 0) {
+		resp->status = R_HTTP_OK;
+	} else if (strstr(req->path, "echo")) {
+		char *random_string = NULL, *echo = NULL;
+		if (try_parse_field(req->path, slash_char, &echo, 1) ||
+			try_parse_field(req->path, slash_char, &random_string, 2) ||
+			strcmp(echo, "echo") != 0) {
+		resp->status == R_NOT_FOUND;
+		} else {
+		resp->status = R_HTTP_OK;
+		resp->content = random_string;
+		resp->type = CT_TEXT_PLAIN;
+		}
+		if (echo)
+		free(echo);
+		if (resp->status != R_HTTP_OK && random_string)
+		free(random_string);
+	} else if (strcmp(req->path, "/user-agent") == 0) {
+		resp->status = R_HTTP_OK;
+		resp->content = strdup(req->agent);
+		resp->type = CT_TEXT_PLAIN;
+	} else {
+		resp->status = R_NOT_FOUND;
+	}
+	if (serialize_response(resp, recv_buffer, RECV_BUFFER_SIZE)) {
+		continue;
+	}
+	printf("Response:\n%s", recv_buffer);
+	if (send_response(client_fd, recv_buffer)) {
+		continue;
+	}
+	printf("Response sent!\n");
   }
-  printf("Client connected\n");
-  /* get any client data */
-  recv_len = recv(client_fd, recv_buffer, RECV_BUFFER_SIZE, 0);
-  printf("Got this from the client:\n%s\n", recv_buffer);
-  /* parse client request */
-  if (parse_request(recv_buffer, req)) {
-    printf("Failed to parse the client request\n");
-    return 1;
-  }
-  print_request(req);
-  /* respond to the request */
-  memset(resp, 0, sizeof(struct response));
-  if (strcmp(req->path, "/") == 0) {
-    resp->status = R_HTTP_OK;
-  } else if (strstr(req->path, "echo")) {
-    char *random_string = NULL, *echo = NULL;
-    if (try_parse_field(req->path, slash_char, &echo, 1) ||
-        try_parse_field(req->path, slash_char, &random_string, 2) ||
-        strcmp(echo, "echo") != 0) {
-      resp->status == R_NOT_FOUND;
-    } else {
-      resp->status = R_HTTP_OK;
-      resp->content = random_string;
-      resp->type = CT_TEXT_PLAIN;
-    }
-    if (echo)
-      free(echo);
-    if (resp->status != R_HTTP_OK && random_string)
-      free(random_string);
-  } else if (strcmp(req->path, "/user-agent") == 0) {
-    resp->status = R_HTTP_OK;
-    resp->content = strdup(req->agent);
-    resp->type = CT_TEXT_PLAIN;
-  } else {
-    resp->status = R_NOT_FOUND;
-  }
-  if (serialize_response(resp, recv_buffer, RECV_BUFFER_SIZE)) {
-    return 1;
-  }
-  printf("Response:\n%s", recv_buffer);
-  if (send_response(client_fd, recv_buffer)) {
-    return 1;
-  }
-  printf("Response sent!\n");
   close(server_fd);
   free_req(req);
   free_resp(resp);
