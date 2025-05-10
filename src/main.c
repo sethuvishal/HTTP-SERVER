@@ -123,7 +123,7 @@ int main() {
 		);
 		send(new_socket, response, sizeof(response), 0);
 	} else {
-		char not_found_404[] = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
+		char not_found_404[] = "HTTP/1.1 404 Not Found\r\n\r\n";
 		send(new_socket, not_found_404, sizeof(not_found_404), 0);
 	}
 
