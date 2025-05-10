@@ -47,18 +47,29 @@ int main() {
 	printf("Waiting for a client to connect...\n");
 	client_addr_len = sizeof(client_addr);
 	int new_socket;
-	char *res = "HTTP/1.1 200 OK\r\n\r\n";
-
+	
 	new_socket = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
 	if (new_socket < 0) {
 		perror("accept");
 		exit(EXIT_FAILURE);
 	}
-
-	send(new_socket, res, strlen(res), 0);
 	printf("Client connected\n");
+	
+	char buffer[1024] = { 0 };
+	printf("Read reqeust from the client");
+	read(new_socket, buffer, 1024 - 1);
+	
+	char *res = "HTTP/1.1 200 OK\r\n\r\n";
+	char* res404 = "HTTP/1.1 404 Not Found\r\n\r\n";
+	if(buffer[5] == ' '){
+
+		send(new_socket, res, strlen(res), 0);
+	}else {
+		send(new_socket, res404, strlen(res404), 0);
+	}
 
 	close(new_socket);
+	close(server_fd);
 
 	return 0;
 }
