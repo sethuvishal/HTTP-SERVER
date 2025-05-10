@@ -46,11 +46,19 @@ int main() {
 	
 	printf("Waiting for a client to connect...\n");
 	client_addr_len = sizeof(client_addr);
-	
-	accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
+	int new_socket;
+	char *res = "HTTP/1.1 200 OK\r\n\r\n";
+
+	new_socket = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
+	if (new_socket < 0) {
+		perror("accept");
+		exit(EXIT_FAILURE);
+	}
+
+	send(new_socket, res, strlen(res), 0);
 	printf("Client connected\n");
-	
-	close(server_fd);
+
+	close(new_socket);
 
 	return 0;
 }
