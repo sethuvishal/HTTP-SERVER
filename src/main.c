@@ -12,8 +12,6 @@ int main() {
 	setbuf(stdout, NULL);
  	setbuf(stderr, NULL);
 
-	printf("Logs from your program will appear here!\n");
-	
 	int server_fd, client_addr_len;
 	struct sockaddr_in client_addr;
 	
