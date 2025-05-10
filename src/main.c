@@ -32,7 +32,7 @@ struct response {
 };
 char *server_status_responses[R_COUNT] = {
     [R_HTTP_OK] = "HTTP/1.1 200 OK",
-    [R_NOT_FOUND] = "HTTP/1.1 404 Not Found ",
+    [R_NOT_FOUND] = "HTTP/1.1 404 Not Found",
 };
 char *server_content_types[R_COUNT] = {
     [CT_TEXT_PLAIN] = "text/plain",
