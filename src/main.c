@@ -190,6 +190,7 @@ int main() {
   }
   /* listen for clients */
   int connection_backlog = 5;
+  printf("Listening on port %d...\n", ntohs(serv_addr.sin_port));
   if (listen(server_fd, connection_backlog) != 0) {
     printf("Listen failed: %s \n", strerror(errno));
     return 1;
