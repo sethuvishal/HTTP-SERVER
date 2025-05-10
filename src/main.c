@@ -17,6 +17,7 @@ typedef enum {
 } resp_status_e;
 typedef enum {
   CT_TEXT_PLAIN = 0,
+  CT_OCTET_STREAM,
   /* guard */
   CT_COUNT
 } content_type_e;
@@ -38,6 +39,7 @@ char *server_status_responses[R_COUNT] = {
 };
 char *server_content_types[CT_COUNT] = {
     [CT_TEXT_PLAIN] = "text/plain",
+    [CT_OCTET_STREAM] = "application/octet-stream",
 };
 char *newline_char = "\r\n";
 char *space_char = " ";
@@ -152,6 +154,74 @@ int serialize_response(struct response *resp, char *buf, int size) {
   }
   return 0;
 }
+
+struct response* echo_handler(struct request* req){
+  char *random_string = NULL, *echo = NULL;
+  struct response* resp = malloc(sizeof(struct response));
+  if (try_parse_field(req->path, slash_char, &echo, 1) ||
+    try_parse_field(req->path, slash_char, &random_string, 2) ||
+    strcmp(echo, "echo") != 0) {
+  resp->status == R_NOT_FOUND;
+  } else {
+  resp->status = R_HTTP_OK;
+  resp->content = random_string;
+  resp->type = CT_TEXT_PLAIN;
+  }
+  if (echo) free(echo);
+  if (resp->status != R_HTTP_OK && random_string)
+    free(random_string);
+  return resp;
+}
+
+struct response* serve_file(struct request* req){
+  char *prefix = "/files/";
+  printf("Here!\n");
+  char *filename = &req->path[strlen(prefix)];
+  printf("Request Path %s\n", filename);
+  struct response* resp = malloc(sizeof(struct response));
+  printf("Here!!!");
+  if(filename == NULL){
+    resp->status = R_NOT_FOUND;
+    resp->content = prefix;
+    resp->type = CT_TEXT_PLAIN;
+    return resp;
+  }
+  char cwd[PATH_MAX];
+  char fullpath[PATH_MAX];
+  printf("Nothing went wrong!");
+  if(getcwd(cwd, sizeof(cwd)) == NULL){
+    resp->status = R_NOT_FOUND;
+    resp->content = "Something went wrong!";
+    resp->type = CT_TEXT_PLAIN;
+    return resp;
+  }
+  snprintf(fullpath, sizeof(fullpath), "%s/%s", cwd, filename);
+  // Check if file exists
+  if (access(fullpath, F_OK) != 0) {
+      printf("File not found\n");
+      resp->status = R_NOT_FOUND;
+      resp->content = "File not found";
+      resp->type = CT_TEXT_PLAIN;
+      return resp;
+  }
+
+  FILE *fp = fopen(fullpath, "r");
+  fseek(fp, 0, SEEK_END);
+  long filesize = ftell(fp);
+  rewind(fp);
+  char *file_contents = malloc(filesize + 1);
+
+  fread(file_contents, 1, filesize, fp);
+  file_contents[filesize] = '\0';
+
+  fclose(fp);
+  resp->status = R_HTTP_OK;
+  resp->content = file_contents;
+  resp->type = CT_TEXT_PLAIN;
+
+  return resp;
+}
+
 char recv_buffer[RECV_BUFFER_SIZE];
 int main() {
   // Disable output buffering
@@ -199,111 +269,56 @@ int main() {
   }
   printf("Waiting for a client to connect...\n");
   while(1){
-	client_addr_len = sizeof(client_addr);
-	/* if any client desires to connect -- accept */
-	client_fd =
-		accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
-	size_t main_pid = getpid();
-	size_t pid = fork();
-	if (pid != 0) {
-		close(client_fd);
-		continue;
-	}
-	if (client_fd == -1) {
-		printf("Failed to connect to client: %s\n", strerror(errno));
-	}
-	printf("Client connected\n");
-	/* get any client data */
-	recv_len = recv(client_fd, recv_buffer, RECV_BUFFER_SIZE, 0);
-	printf("Got this from the client:\n%s\n", recv_buffer);
-	/* parse client request */
-	if (parse_request(recv_buffer, req)) {
-		printf("Failed to parse the client request\n");
-	}
-	print_request(req);
-	/* respond to the request */
-	memset(resp, 0, sizeof(struct response));
-	if (strcmp(req->path, "/") == 0) {
-		resp->status = R_HTTP_OK;
-	} else if (strstr(req->path, "echo")) {
-		char *random_string = NULL, *echo = NULL;
-		if (try_parse_field(req->path, slash_char, &echo, 1) ||
-			try_parse_field(req->path, slash_char, &random_string, 2) ||
-			strcmp(echo, "echo") != 0) {
-		resp->status == R_NOT_FOUND;
-		} else {
-		resp->status = R_HTTP_OK;
-		resp->content = random_string;
-		resp->type = CT_TEXT_PLAIN;
-		}
-		if (echo)
-		free(echo);
-		if (resp->status != R_HTTP_OK && random_string)
-		free(random_string);
-	} else if (strcmp(req->path, "/user-agent") == 0) {
-		resp->status = R_HTTP_OK;
-		resp->content = strdup(req->agent);
-		resp->type = CT_TEXT_PLAIN;
-	} else if (strncmp(req->path, "/files/", 7) == 0) {
-    char *prefix = "/files/";
-
-    char *filename = &req->path[strlen(prefix)];
-    if(filename == NULL){
-      resp->status = R_NOT_FOUND;
-      resp->content = prefix;
-      resp->type = CT_TEXT_PLAIN;
-    }else {
-      char cwd[PATH_MAX];
-      char fullpath[PATH_MAX];
-      if(getcwd(cwd, sizeof(cwd)) == NULL){
-        resp->status = R_NOT_FOUND;
-        resp->content = "Something went wrong!";
-        resp->type = CT_TEXT_PLAIN;
-      }else {
-        snprintf(fullpath, sizeof(fullpath), "%s/%s", cwd, filename);
-        // Check if file exists
-        printf("Full Filepath: %s\n", fullpath);
-        if (access(fullpath, F_OK) != 0) {
-            printf("File not found\n");
-            resp->status = R_NOT_FOUND;
-            resp->content = "File not found";
-            resp->type = CT_TEXT_PLAIN;
-        }else {
-          printf("File Found\n");
-          FILE *fp = fopen(fullpath, "r");
-          fseek(fp, 0, SEEK_END);
-          long filesize = ftell(fp);
-          printf("FIle Size %d\n", filesize);
-          rewind(fp);
-
-          char *file_contents = malloc(filesize + 1);
-
-          fread(file_contents, 1, filesize, fp);
-          file_contents[filesize] = '\0';
-
-          fclose(fp);
-          resp->status = R_HTTP_OK;
-          resp->content = file_contents;
-          resp->type = CT_TEXT_PLAIN;
-        }
-      }
+    client_addr_len = sizeof(client_addr);
+    /* if any client desires to connect -- accept */
+    client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
+    size_t main_pid = getpid();
+    size_t pid = fork();
+    if (pid != 0) {
+      close(client_fd);
+      continue;
     }
-  }else {
-		resp->status = R_NOT_FOUND;
-	}
-	if (serialize_response(resp, recv_buffer, RECV_BUFFER_SIZE)) {
-		continue;
-	}
-	printf("Response:\n%s", recv_buffer);
-	if (send_response(client_fd, recv_buffer)) {
-		continue;
-	}
-	printf("Response sent!\n");
-	free_req(req);
-	free_resp(resp);
-	if(getpid() != main_pid){
-		exit(0);
-	}
+    if (client_fd == -1) {
+      printf("Failed to connect to client: %s\n", strerror(errno));
+    }
+    printf("Client connected\n");
+    /* get any client data */
+    recv_len = recv(client_fd, recv_buffer, RECV_BUFFER_SIZE, 0);
+    printf("Got this from the client:\n%s\n", recv_buffer);
+    /* parse client request */
+    if (parse_request(recv_buffer, req)) {
+      printf("Failed to parse the client request\n");
+    }
+    /* respond to the request */
+    printf("creating response object");
+    memset(resp, 0, sizeof(struct response));
+    if (strcmp(req->path, "/") == 0) {
+      resp->status = R_HTTP_OK;
+    } else if (strstr(req->path, "echo")) {
+      resp = echo_handler(req);
+    } else if (strcmp(req->path, "/user-agent") == 0) {
+      resp->status = R_HTTP_OK;
+      resp->content = strdup(req->agent);
+      resp->type = CT_TEXT_PLAIN;
+    } else if (strncmp(req->path, "/files/", 7) == 0) {
+      printf("Here");
+      resp = serve_file(req);
+    }else {
+      resp->status = R_NOT_FOUND;
+    }
+    if (serialize_response(resp, recv_buffer, RECV_BUFFER_SIZE)) {
+      continue;
+    }
+
+    if (send_response(client_fd, recv_buffer)) {
+      continue;
+    }
+    printf("Response sent!\n");
+    free_req(req);
+    free_resp(resp);
+    if(getpid() != main_pid){
+      exit(0);
+    }
   }
   close(server_fd);
   return 0;
