@@ -6,6 +6,49 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+typedef uint64_t u64;
+typedef int64_t i64;
+typedef uint32_t u32;
+typedef int32_t i32;
+typedef uint16_t u16;
+typedef int16_t i16;
+typedef uint8_t u8;
+typedef int8_t i8;
+typedef float f32;
+typedef double f64;
+
+enum http_request {
+	HTTP_REQUEST_GET,
+	HTTP_REQUEST_POST,
+	HTTP_REQUEST_PUT,
+	HTTP_REQUEST_PATCH,
+	HTTP_REQUEST_DELETE,
+	HTTP_REQUEST__COUNT,
+};
+
+struct method_string_pair {
+	enum http_request method;
+	u8 *str;
+} known_methods[] = {
+	{HTTP_REQUEST_GET, "GET"},       {HTTP_REQUEST_POST, "POST"},
+	{HTTP_REQUEST_PUT, "PUT"},       {HTTP_REQUEST_PATCH, "PATCH"},
+	{HTTP_REQUEST_DELETE, "DELETE"},
+};
+
+struct http_header {
+	enum http_request method;
+	u8 *path;
+	u8 user_agent[1024];
+  	u8 content_type[1024];
+	int content_length;
+};
+
+enum http_request method_from_str(u8 *str) {
+	for (u32 i = 0; i < sizeof(known_methods); i++)
+	  if (strcmp(str, known_methods[i].str) == 0)
+		return known_methods[i].method;
+	return -1;
+}
 
 int main() {
 	// Disable output buffering
@@ -54,19 +97,36 @@ int main() {
 		exit(EXIT_FAILURE);
 	}
 	printf("Client connected\n");
-	
-	char buffer[1024] = { 0 };
-	printf("Read reqeust from the client");
-	read(new_socket, buffer, 1024 - 1);
-	
-	char *res = "HTTP/1.1 200 OK\r\n\r\n";
-	char* res404 = "HTTP/1.1 404 Not Found\r\n\r\n";
-	if(buffer[5] == ' '){
 
-		send(new_socket, res, strlen(res), 0);
-	}else {
-		send(new_socket, res404, strlen(res404), 0);
+	u8 buffer[1024];
+	read(new_socket, buffer, sizeof(buffer));
+
+	struct http_header request = {0};
+	request.method = method_from_str(strtok(buffer, " "));
+	request.path = strtok(0, " ");
+
+	printf("path: %s\n method: %d\n", request.path, request.method);
+	if (strcmp(request.path, "/") == 0) {
+		char ok_200[] = "HTTP/1.1 200 OK\r\n\r\n";
+		send(new_socket, ok_200, sizeof(ok_200), 0);
+	} else if(strcmp(strtok(request.path, "/"), "echo") == 0){
+		char* path = strtok(0, "/");
+		char response[2048];
+		sprintf(response,
+			"HTTP/1.1 200 OK\r\n"
+			"Content-Type: text/plain\r\n"
+			"Content-Length: %ld\r\n"
+			"\r\n"
+			"%s",
+			strlen(path),
+			path
+		);
+		send(new_socket, response, sizeof(response), 0);
+	} else {
+		char not_found_404[] = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
+		send(new_socket, not_found_404, sizeof(not_found_404), 0);
 	}
+
 
 	close(new_socket);
 	close(server_fd);
