@@ -38,8 +38,10 @@ struct method_string_pair {
 struct http_header {
 	enum http_request method;
 	u8 *path;
-	u8 user_agent[1024];
+	u8 *user_agent;
   	u8 content_type[1024];
+	u8 *version;
+	u8 *host;
 	int content_length;
 };
 
@@ -48,6 +50,38 @@ enum http_request method_from_str(u8 *str) {
 	  if (strcmp(str, known_methods[i].str) == 0)
 		return known_methods[i].method;
 	return -1;
+}
+
+void parse_http_header(struct http_header *header, u8 *buffer) {
+	// get the request method
+	u8 *header_token = strtok(buffer, " \r\n");
+	header->method = method_from_str(header_token);
+	// get the request path
+	header_token = strtok(NULL, " \r\n");
+	header->path = header_token;
+	// get the request version
+	header_token = strtok(NULL, " \r\n");
+	header->version = header_token;
+	// get the request host
+	header_token = strtok(NULL, " \r\n");
+	header_token = strtok(NULL, " \r\n");
+	header->host = header_token;
+	// get the request host
+	header_token = strtok(NULL, " \r\n");
+	if(strcmp(header_token, "User-Agent:") == 0){
+		header_token = strtok(NULL, " \r\n");
+		header->user_agent = header_token;
+	}else
+		header_token = strtok(NULL, " \r\n");
+
+	header_token = strtok(NULL, " \r\n");
+	if(strcmp(header_token, "User-Agent:") == 0){
+		header_token = strtok(NULL, " \r\n");
+		header->user_agent = header_token;
+	}else
+		header_token = strtok(NULL, " \r\n");
+	printf("header_token user agent: %s\n", header_token);
+
 }
 
 int main() {
@@ -102,13 +136,18 @@ int main() {
 	read(new_socket, buffer, sizeof(buffer));
 
 	struct http_header request = {0};
-	request.method = method_from_str(strtok(buffer, " "));
-	request.path = strtok(0, " ");
+	parse_http_header(&request, buffer);
 
-	printf("path: %s\n method: %d\n", request.path, request.method);
+	printf("path: %s\n method: %d\n user agent: %s\n", request.path, request.method, request.user_agent);
 	if (strcmp(request.path, "/") == 0) {
 		char ok_200[] = "HTTP/1.1 200 OK\r\n\r\n";
 		send(new_socket, ok_200, sizeof(ok_200), 0);
+	} else if (strncmp(request.path, "/user-agent", 11) == 0) {
+		const char *format = "HTTP/1.1 200 OK\r\nContent-Type: "
+							 "text/plain\r\nContent-Length: %zu\r\n\r\n%s";
+		char response[1024];
+		sprintf(response, format, strlen(request.user_agent), request.user_agent);
+		send(new_socket, response, sizeof(response), 0);
 	} else if(strcmp(strtok(request.path, "/"), "echo") == 0){
 		char* path = strtok(0, "/");
 		char response[2048];
@@ -126,7 +165,6 @@ int main() {
 		char not_found_404[] = "HTTP/1.1 404 Not Found\r\n\r\n";
 		send(new_socket, not_found_404, sizeof(not_found_404), 0);
 	}
-
 
 	close(new_socket);
 	close(server_fd);
