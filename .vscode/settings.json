@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "response.h": "c",
+        "config.h": "c"
+    }
+}

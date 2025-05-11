@@ -6,4 +6,6 @@ extern const char *newline_char;
 extern const char *space_char;
 extern const char *slash_char;
 
+int get_file_fd(char* filename) ;
+
 #endif
