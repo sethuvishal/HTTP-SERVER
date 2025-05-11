@@ -22,6 +22,8 @@ typedef enum {
   CT_COUNT
 } content_type_e;
 struct request {
+  char* method;
+  int content_length;
   char *path;
   char *host;
   char *agent;
@@ -90,39 +92,91 @@ int try_parse_field(char *buf, char *delim, char **out, int fnum) {
   free(buf_copy);
   return rc;
 }
-int parse_request(char *buf, struct request *req) {
-  char *save_line, *line, *field;
-  int cntr;
-  memset(req, 0, sizeof(struct request));
-  /* parse path */
-  line = strtok_r(buf, newline_char, &save_line);
-  if (!line || try_parse_field(line, space_char, &req->path, 2)) {
-    printf("Failed to parse request path");
-    return 0;
-  }
-  /* parse http version */
-  if (!line || try_parse_field(line, space_char, &req->http_version, 3)) {
-    printf("Failed to parse request http version");
-    return 0;
-  }
-  /* parse host */
-  line = strtok_r(save_line, newline_char, &save_line);
-  if (!line || try_parse_field(line, space_char, &req->host, 2)) {
-    printf("Failed to parse request host");
-	return 0;
-  }
-  /* parse user agent */
-  line = strtok_r(save_line, newline_char, &save_line);
-  if (!line || try_parse_field(line, space_char, &req->agent, 2)) {
-    printf("Failed to parse request user agent");
-	return 0;
-  }
-  /* parse content */
-  char *content_ptr = save_line + 2;
-  req->content = strdup(content_ptr);
-  if (!req->content) {
-    printf("Failed to parse content");
-  }
+
+int parse_request(char *buf, size_t buf_len, struct request *req) {
+    memset(req, 0, sizeof(struct request));
+
+    // Find the end of headers (double CRLF)
+    char *headers_end = strstr(buf, "\r\n\r\n");
+    if (!headers_end) {
+        return -1; // Headers not complete yet
+    }
+
+    size_t headers_len = headers_end - buf + 4; // Include "\r\n\r\n"
+    char *headers = strndup(buf, headers_len);
+    if (!headers) return -1;
+
+    // Begin parsing line by line
+    char *save_line;
+    char *line = strtok_r(headers, newline_char, &save_line);
+    
+    // Parse request line
+    if (!line) return -1;
+    char* tmp;
+    tmp = strtok(line, " ");
+    req->method = tmp ? strdup(tmp) : NULL;
+    tmp = strtok(NULL, " ");
+    req->path = tmp ? strdup(tmp) : NULL;
+    tmp = strtok(NULL, " ");
+    req->http_version = tmp ? strdup(tmp) : NULL;
+    if (!req->method || !req->path || !req->http_version) return -1;
+
+    // Parse headers
+    while ((line = strtok_r(NULL, newline_char, &save_line))) {
+        if (strncasecmp(line, "Host:", 5) == 0) {
+            req->host = strdup(line + 6);
+        } else if (strncasecmp(line, "User-Agent:", 11) == 0) {
+            req->agent = strdup(line + 12);
+        } else if (strncasecmp(line, "Content-Length:", 15) == 0) {
+            req->content_length = atoi(line + 16);
+        }
+    }
+
+    // Parse body (after header end)
+    size_t body_offset = headers_len;
+    size_t remaining = buf_len - body_offset;
+    if (req->content_length > 0) {
+        if (remaining < req->content_length) {
+            return -2; // Need more data
+        }
+        req->content = (char *)malloc(req->content_length + 1);
+        if (!req->content) return -1;
+        memcpy(req->content, buf + body_offset, req->content_length);
+        req->content[req->content_length] = '\0';
+    }
+
+    return headers_len + req->content_length; // total bytes consumed
+}
+
+int recieve_request(int client_fd, struct request *req) {
+    char *save_line, *line, *field;
+    int cntr, total_received = 0, buffer_size = RECV_BUFFER_SIZE;
+    char *recv_buffer = malloc(buffer_size);
+    memset(req, 0, sizeof(struct request));
+    while (1) {
+        // Grow buffer if needed
+        if (buffer_size - total_received < 1024) {
+            buffer_size *= 2;
+            recv_buffer = realloc(recv_buffer, buffer_size);
+        }
+
+        int recv_len = recv(client_fd, recv_buffer + total_received, buffer_size - total_received, 0);
+        if (recv_len <= 0) {
+            printf("Client disconnected or error.\n");
+            break;
+        }
+        total_received += recv_len;
+
+        int parse_result = parse_request(recv_buffer, total_received, req);
+        if (parse_result == -1 || parse_result == -2) {
+            continue; // Need more data (headers or body incomplete)
+        }
+
+        // Request fully parsed
+        printf("Got full request!\n");
+        break;
+    }
+
   return 0;
 }
 
@@ -292,7 +346,6 @@ struct response* serve_file(struct request* req){
   return resp;
 }
 
-char recv_buffer[RECV_BUFFER_SIZE];
 int main() {
   // Disable output buffering
   setbuf(stdout, NULL);
@@ -352,11 +405,8 @@ int main() {
       printf("Failed to connect to client: %s\n", strerror(errno));
     }
     printf("Client connected\n");
-    /* get any client data */
-    recv_len = recv(client_fd, recv_buffer, RECV_BUFFER_SIZE, 0);
-    printf("Got this from the client:\n%s\n", recv_buffer);
     /* parse client request */
-    if (parse_request(recv_buffer, req)) {
+    if (recieve_request(client_fd, req)) {
       printf("Failed to parse the client request\n");
     }
     /* respond to the request */
