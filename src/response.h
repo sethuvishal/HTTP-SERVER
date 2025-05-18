@@ -4,6 +4,21 @@
 #include "request.h"
 
 typedef enum {
+    CT_TEXT_PLAIN = 0,
+    CT_OCTET_STREAM,
+    CT_TEXT_HTML,
+    CT_STYLE_CSS,
+    CT_APPLICATION_JAVASCRIPT,
+    CT_APPLICATION_JSON,
+    CT_IMAGE_PNG,
+    CT_IMAGE_JPEG,
+    CT_IMAGE_GIF,
+    CT_IMAGE_SVG,
+    CT_APPLICATION_PDF,
+    /* guard */
+    CT_COUNT
+} content_type_e;
+typedef enum {
     R_HTTP_OK = 0,
     R_NOT_FOUND,
     /* guard */

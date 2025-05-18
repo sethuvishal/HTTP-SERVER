@@ -10,6 +10,7 @@
 #include "request.h"
 #include "response.h"
 #include "config.h"
+#include "utils.h"
 
 struct response* echo_handler(struct request* req){
   char *random_string = NULL, *echo = NULL;
@@ -63,7 +64,9 @@ struct response* serve_file(struct request* req){
   long filesize = ftell(fp);
   fclose(fp);
   resp->status = R_HTTP_OK;
-  resp->type = CT_TEXT_HTML;
+  const char* file_ext = get_file_extension(filename);
+  content_type_e content_type = get_content_type(file_ext);
+  resp->type = content_type;
   resp->has_content_length = 1;
   resp->content_length = filesize;
   resp->content = NULL;

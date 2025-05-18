@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "response.h": "c",
-        "config.h": "c"
+        "config.h": "c",
+        "request.h": "c"
     }
 }

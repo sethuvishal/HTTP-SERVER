@@ -13,6 +13,14 @@ const char *server_content_types[CT_COUNT] = {
     [CT_TEXT_PLAIN] = "text/plain",
     [CT_OCTET_STREAM] = "application/octet-stream",
     [CT_TEXT_HTML] = "text/html",
+    [CT_STYLE_CSS] = "text/css",
+    [CT_APPLICATION_JAVASCRIPT] = "application/javascript",
+    [CT_APPLICATION_JSON] = "application/json",
+    [CT_IMAGE_JPEG] = "image/jpeg",
+    [CT_IMAGE_PNG] = "image/png",
+    [CT_IMAGE_GIF] = "image/gif",
+    [CT_IMAGE_SVG] = "image/svg+xml",
+    [CT_APPLICATION_PDF] = "application/pdf"
 };
 
 void free_resp(struct response *resp) {

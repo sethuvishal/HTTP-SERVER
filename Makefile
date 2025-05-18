@@ -1,4 +1,4 @@
-objects = build/request.o build/response.o build/main.o build/config.o
+objects = build/request.o build/response.o build/main.o build/config.o build/utils.o
 all: $(objects)
 	cc $^ -o build/all
 

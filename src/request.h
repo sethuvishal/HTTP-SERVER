@@ -1,14 +1,6 @@
 #ifndef REQUEST_H
 #define REQUEST_H
 
-typedef enum {
-    CT_TEXT_PLAIN = 0,
-    CT_OCTET_STREAM,
-    CT_TEXT_HTML,
-    /* guard */
-    CT_COUNT
-} content_type_e;
-
 struct request {
     char* method;
     int content_length;
