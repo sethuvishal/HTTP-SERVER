@@ -12,6 +12,7 @@ void print_request(struct request *req) {
     printf("\t host: %s\n", req->host);
     printf("\t agent: %s\n", req->agent);
     printf("\t content: %s\n", req->content);
+    printf("\t Connection: %s\n", req->connection);
 }
 
 void free_req(struct request *req) {
@@ -85,6 +86,8 @@ int parse_request(char *buf, size_t buf_len, struct request *req) {
             req->agent = strdup(line + 12);
         } else if (strncasecmp(line, "Content-Length:", 15) == 0) {
             req->content_length = atoi(line + 16);
+        }else if(strncasecmp(line, "Connection:", 11) == 0){
+          req->connection = strdup(line + 12);
         }
     }
 
@@ -119,7 +122,7 @@ int recieve_request(int client_fd, struct request *req) {
         int recv_len = recv(client_fd, recv_buffer + total_received, buffer_size - total_received, 0);
         if (recv_len <= 0) {
             printf("Client disconnected or error.\n");
-            break;
+            return 1;
         }
         total_received += recv_len;
 

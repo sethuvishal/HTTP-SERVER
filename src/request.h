@@ -9,6 +9,7 @@ struct request {
     char *agent;
     char *http_version;
     char *content;
+    char *connection;
 };
 
 void print_request(struct request*);

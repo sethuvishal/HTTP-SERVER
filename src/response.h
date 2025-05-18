@@ -37,7 +37,7 @@ extern const char *server_content_types[CT_COUNT];
 
 void free_resp(struct response *);
 int send_all(int, const char *, size_t);
-int serialize_response(struct response *, char *, int);
-int send_response(int, struct response *, int);
+int serialize_response(struct response *, struct request *, char *, int);
+int send_response(int, struct response *, struct request *, int);
 int stream_fd_to_client(int, int);
 #endif

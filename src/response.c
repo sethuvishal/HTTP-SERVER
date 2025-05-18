@@ -24,7 +24,7 @@ const char *server_content_types[CT_COUNT] = {
 };
 
 void free_resp(struct response *resp) {
-    if (resp->content)
+    if (resp->content != NULL)
       free(resp->content);
     free(resp);
 }
@@ -42,7 +42,7 @@ int send_all(int cfd, const char *data, size_t len) {
     return 0;
 }
   
-int serialize_response(struct response *resp, char *buf, int size) {
+int serialize_response(struct response *resp,struct request *req, char *buf, int size) {
     if(resp->content != NULL){
       resp->has_content_length = 1;
       resp->content_length = strlen(resp->content);
@@ -57,14 +57,14 @@ int serialize_response(struct response *resp, char *buf, int size) {
     } else {
       index += snprintf(&buf[index], size - index, "Transfer-Encoding: chunked\r\n");
     }
-  
+    index += snprintf(&buf[index], size - index, "Connection: %s\r\n", req->connection);
     index += snprintf(&buf[index], size - index, "\r\n");
     return index;
 }
   
-int send_response(int cfd, struct response *resp, int src_fd) {
+int send_response(int cfd, struct response *resp, struct request *req, int src_fd) {
     char header_buf[1024];
-    int header_len = serialize_response(resp, header_buf, sizeof(header_buf));
+    int header_len = serialize_response(resp, req, header_buf, sizeof(header_buf));
     if (header_len < 0) return -1;
     // Send headers
     if (send_all(cfd, header_buf, header_len) != 0) {

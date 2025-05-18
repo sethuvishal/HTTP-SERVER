@@ -46,7 +46,7 @@ struct response* serve_file(struct request* req){
 
   if(getcwd(cwd, sizeof(cwd)) == NULL){
     resp->status = R_NOT_FOUND;
-    resp->content = "Something went wrong!";
+    resp->content = strdup("Something went wrong!");
     resp->type = CT_TEXT_PLAIN;
     return resp;
   }
@@ -54,7 +54,7 @@ struct response* serve_file(struct request* req){
   // Check if file exists
   if (access(fullpath, F_OK) != 0) {
       resp->status = R_NOT_FOUND;
-      resp->content = "File not found";
+      resp->content = strdup("File not found");
       resp->type = CT_TEXT_PLAIN;
       return resp;
   }
@@ -74,6 +74,59 @@ struct response* serve_file(struct request* req){
   return resp;
 }
 
+void handle_connection(int client_fd){
+  while(1){
+    struct request *req = malloc(sizeof(struct request));
+    struct response *resp = malloc(sizeof(struct response));
+    if (!req || !resp) {
+      fprintf(stderr, "Memory allocation failed\n");
+      exit(1);
+    }
+    memset(resp, 0, sizeof(struct response));
+    if (recieve_request(client_fd, req)) {
+      free_req(req);
+      free_resp(resp);
+      break;  // EXIT the loop on error
+    }
+    printf("Request Path: %s\n", req->path);
+    /* respond to the request */
+    memset(resp, 0, sizeof(struct response));
+    if (strcmp(req->path, "/") == 0) {
+      resp->status = R_HTTP_OK;
+      send_response(client_fd, resp, req, NULL);
+    } else if (strstr(req->path, "echo")) {
+      resp = echo_handler(req);
+      send_response(client_fd, resp, req, NULL);
+    } else if (strcmp(req->path, "/user-agent") == 0) {
+      resp->status = R_HTTP_OK;
+      resp->content = strdup(req->agent);
+      resp->type = CT_TEXT_PLAIN;
+      send_response(client_fd, resp, req, NULL);
+    } else if (strncmp(req->path, "/files/", 7) == 0) {
+      resp = serve_file(req);
+      if(resp->status == R_HTTP_OK){
+        int fd = get_file_fd(&req->path[strlen("/files/")]);
+        send_response(client_fd, resp, req, fd == -1 ? 0 : fd);
+      }else{
+        send_response(client_fd, resp, req, 0);
+      }
+    }else {
+      resp->status = R_NOT_FOUND;
+      send_response(client_fd, resp, req, NULL);
+    }
+    if(strcmp(req->connection, "keep-alive") != 0){
+      free_req(req);
+      free_resp(resp);
+      break;
+    }
+    free_req(req);
+    free_resp(resp);
+  }
+  printf("closing the connection %d\n", getpid());
+  close(client_fd);
+  exit(0);
+}
+
 int main() {
   // Disable output buffering
   setbuf(stdout, NULL);
@@ -82,11 +135,6 @@ int main() {
   ssize_t recv_len;
   int server_fd, client_addr_len, client_fd;
   struct sockaddr_in client_addr;
-  struct request *req = malloc(sizeof(struct request));
-  struct response *resp = malloc(sizeof(struct response));
-  if (!req || !resp) {
-    return 1;
-  }
   server_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (server_fd == -1) {
     return 1;
@@ -122,6 +170,7 @@ int main() {
     size_t main_pid = getpid();
     size_t pid = fork();
     if (pid != 0) {
+      printf("Pid %d\n", pid);
       close(client_fd);
       continue;
     }
@@ -129,40 +178,8 @@ int main() {
       printf("Failed to connect to client: %s\n", strerror(errno));
     }
     /* parse client request */
-    if (recieve_request(client_fd, req)) {
-      printf("Failed to parse the client request\n");
-    }
-    printf("Client connected: %d %s\n", client_fd, req->path);
-    /* respond to the request */
-    memset(resp, 0, sizeof(struct response));
-    if (strcmp(req->path, "/") == 0) {
-      resp->status = R_HTTP_OK;
-      send_response(client_fd, resp, NULL);
-    } else if (strstr(req->path, "echo")) {
-      resp = echo_handler(req);
-      send_response(client_fd, resp, NULL);
-    } else if (strcmp(req->path, "/user-agent") == 0) {
-      resp->status = R_HTTP_OK;
-      resp->content = strdup(req->agent);
-      resp->type = CT_TEXT_PLAIN;
-      send_response(client_fd, resp, NULL);
-    } else if (strncmp(req->path, "/files/", 7) == 0) {
-      resp = serve_file(req);
-      if(resp->status == R_HTTP_OK){
-        int fd = get_file_fd(&req->path[strlen("/files/")]);
-        send_response(client_fd, resp, fd == -1 ? 0 : fd);
-      }else{
-        send_response(client_fd, resp, 0);
-      }
-    }else {
-      resp->status = R_NOT_FOUND;
-    }
-
-    free_req(req);
-    free_resp(resp);
-    if(getpid() != main_pid){
-      exit(0);
-    }
+    printf("Client Connected %d\n", client_fd);
+    handle_connection(client_fd);
   }
   close(server_fd);
   return 0;
