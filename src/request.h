@@ -4,6 +4,7 @@
 typedef enum {
     CT_TEXT_PLAIN = 0,
     CT_OCTET_STREAM,
+    CT_TEXT_HTML,
     /* guard */
     CT_COUNT
 } content_type_e;

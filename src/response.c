@@ -4,6 +4,17 @@
 #include <unistd.h>
 #include "response.h"
 
+const char *server_status_responses[R_COUNT] = {
+    [R_HTTP_OK] = "HTTP/1.1 200 OK",
+    [R_NOT_FOUND] = "HTTP/1.1 404 Not Found",
+};
+
+const char *server_content_types[CT_COUNT] = {
+    [CT_TEXT_PLAIN] = "text/plain",
+    [CT_OCTET_STREAM] = "application/octet-stream",
+    [CT_TEXT_HTML] = "text/html",
+};
+
 void free_resp(struct response *resp) {
     if (resp->content)
       free(resp->content);
@@ -45,11 +56,8 @@ int serialize_response(struct response *resp, char *buf, int size) {
   
 int send_response(int cfd, struct response *resp, int src_fd) {
     char header_buf[1024];
-    printf("Sending Response \n");
     int header_len = serialize_response(resp, header_buf, sizeof(header_buf));
-    printf("Header Length: %d", header_len);
     if (header_len < 0) return -1;
-    printf("Headers Serealized");
     // Send headers
     if (send_all(cfd, header_buf, header_len) != 0) {
       fprintf(stderr, "Failed to send headers\n");

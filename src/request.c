@@ -127,9 +127,6 @@ int recieve_request(int client_fd, struct request *req) {
         if (parse_result == -1 || parse_result == -2) {
             continue; // Need more data (headers or body incomplete)
         }
-
-        // Request fully parsed
-        printf("Got full request!\n");
         break;
     }
   

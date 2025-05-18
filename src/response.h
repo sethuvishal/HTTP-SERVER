@@ -17,14 +17,8 @@ struct response {
     long content_length;
     char *content;
 };
-char *server_status_responses[R_COUNT] = {
-    [R_HTTP_OK] = "HTTP/1.1 200 OK",
-    [R_NOT_FOUND] = "HTTP/1.1 404 Not Found",
-};
-char *server_content_types[CT_COUNT] = {
-    [CT_TEXT_PLAIN] = "text/plain",
-    [CT_OCTET_STREAM] = "application/octet-stream",
-};
+extern const char *server_status_responses[R_COUNT];
+extern const char *server_content_types[CT_COUNT];
 
 void free_resp(struct response *);
 int send_all(int, const char *, size_t);

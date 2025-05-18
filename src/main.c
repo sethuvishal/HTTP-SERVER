@@ -52,7 +52,6 @@ struct response* serve_file(struct request* req){
   snprintf(fullpath, sizeof(fullpath), "%s/%s", cwd, filename);
   // Check if file exists
   if (access(fullpath, F_OK) != 0) {
-      printf("File not found\n");
       resp->status = R_NOT_FOUND;
       resp->content = "File not found";
       resp->type = CT_TEXT_PLAIN;
@@ -64,7 +63,7 @@ struct response* serve_file(struct request* req){
   long filesize = ftell(fp);
   fclose(fp);
   resp->status = R_HTTP_OK;
-  resp->type = CT_TEXT_PLAIN;
+  resp->type = CT_TEXT_HTML;
   resp->has_content_length = 1;
   resp->content_length = filesize;
   resp->content = NULL;
@@ -77,26 +76,22 @@ int main() {
   setbuf(stdout, NULL);
   // You can use print statements as follows for debugging, they'll be visible
   // when running tests.
-  printf("Logs from your program will appear here!\n");
   ssize_t recv_len;
   int server_fd, client_addr_len, client_fd;
   struct sockaddr_in client_addr;
   struct request *req = malloc(sizeof(struct request));
   struct response *resp = malloc(sizeof(struct response));
   if (!req || !resp) {
-    printf("Failed to alloc request struct");
     return 1;
   }
   server_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (server_fd == -1) {
-    printf("Socket creation failed: %s...\n", strerror(errno));
     return 1;
   } 
   // setting REUSE_PORT ensures that we don't run into 'Address already in use' errors
   int reuse = 1;
   if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) <
       0) {
-    printf("SO_REUSEPORT failed: %s \n", strerror(errno));
     return 1;
   }
   struct sockaddr_in serv_addr = {
@@ -130,13 +125,12 @@ int main() {
     if (client_fd == -1) {
       printf("Failed to connect to client: %s\n", strerror(errno));
     }
-    printf("Client connected\n");
     /* parse client request */
     if (recieve_request(client_fd, req)) {
       printf("Failed to parse the client request\n");
     }
+    printf("Client connected: %d %s\n", client_fd, req->path);
     /* respond to the request */
-    printf("creating response object");
     memset(resp, 0, sizeof(struct response));
     if (strcmp(req->path, "/") == 0) {
       resp->status = R_HTTP_OK;
@@ -161,11 +155,8 @@ int main() {
       resp->status = R_NOT_FOUND;
     }
 
-    printf("Response sent!\n");
     free_req(req);
-    printf("request cleared\n");
     free_resp(resp);
-    printf("response cleared\n");
     if(getpid() != main_pid){
       exit(0);
     }
