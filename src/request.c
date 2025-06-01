@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "request.h"
+#include <errno.h>
 #include "config.h"
 
 
@@ -29,6 +30,17 @@ void free_req(struct request *req) {
     free(req);
 }
 
+void free_conn(struct connection* conn){
+  conn->received = 0;
+  conn->req = malloc(sizeof(struct request));
+  memset(conn->req, 0, sizeof(struct request));
+  if(conn->buffer){
+    free(conn->buffer);
+  }
+  conn->buffer_size = RECV_BUFFER_SIZE;
+  conn->buffer = malloc(conn->buffer_size);
+}
+
 int try_parse_field(char *buf, char *delim, char **out, int fnum) {
     int token_count = 0, rc = 1;
     char *field;
@@ -51,8 +63,6 @@ int try_parse_field(char *buf, char *delim, char **out, int fnum) {
 }
   
 int parse_request(char *buf, size_t buf_len, struct request *req) {
-    memset(req, 0, sizeof(struct request));
-
     // Find the end of headers (double CRLF)
     char *headers_end = strstr(buf, "\r\n\r\n");
     if (!headers_end) {
@@ -107,31 +117,34 @@ int parse_request(char *buf, size_t buf_len, struct request *req) {
     return headers_len + req->content_length; // total bytes consumed
 }
   
-int recieve_request(int client_fd, struct request *req) {
+int recieve_request(int client_fd, struct connection* conn) {
     char *save_line, *line, *field;
-    int cntr, total_received = 0, buffer_size = RECV_BUFFER_SIZE;
-    char *recv_buffer = malloc(buffer_size);
-    memset(req, 0, sizeof(struct request));
+    int cntr;
+    char *recv_buffer = conn->buffer;
     while (1) {
         // Grow buffer if needed
-        if (buffer_size - total_received < 1024) {
-            buffer_size *= 2;
-            recv_buffer = realloc(recv_buffer, buffer_size);
+        if (conn->buffer_size - conn->received < 1024) {
+            conn->buffer_size  *= 2;
+            recv_buffer = realloc(recv_buffer, conn->buffer_size );
         }
 
-        int recv_len = recv(client_fd, recv_buffer + total_received, buffer_size - total_received, 0);
+        int recv_len = recv(client_fd, recv_buffer + conn->received, conn->buffer_size  - conn->received, 0);
+        if(recv_len == -1){
+          if(errno == EAGAIN || errno == EWOULDBLOCK){
+            return 0;
+          }
+        }
         if (recv_len <= 0) {
-            printf("Client disconnected or error.\n");
-            return 1;
+            return -1;
         }
-        total_received += recv_len;
+        conn->received += recv_len;
 
-        int parse_result = parse_request(recv_buffer, total_received, req);
+        int parse_result = parse_request(recv_buffer, conn->received, conn->req);
         if (parse_result == -1 || parse_result == -2) {
             continue; // Need more data (headers or body incomplete)
         }
         break;
     }
   
-    return 0;
+    return 1;
 }

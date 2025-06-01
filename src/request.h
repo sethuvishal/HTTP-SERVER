@@ -12,11 +12,21 @@ struct request {
     char *connection;
 };
 
+struct connection {
+    int fd;
+    char *buffer;
+    int buffer_size;
+    int received;
+    struct request *req;
+};
+
 void print_request(struct request*);
 
 void free_req(struct request*);
 
-int recieve_request(int, struct request*);
+void free_conn(struct connection*);
+
+int recieve_request(int, struct connection*);
 
 int parse_request(char *, size_t , struct request *);
 

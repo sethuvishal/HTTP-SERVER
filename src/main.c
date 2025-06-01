@@ -108,6 +108,7 @@ void handle_request(struct request* req, int client_fd){
     if(resp->status == R_HTTP_OK){
       int fd = get_file_fd(&req->path[strlen("/files/")]);
       send_response(client_fd, resp, req, fd == -1 ? 0 : fd);
+      close(fd);
     }else{
       send_response(client_fd, resp, req, 0);
     }
@@ -126,19 +127,25 @@ void handle_request(struct request* req, int client_fd){
   free_resp(resp);
 }
 
-int handle_connection(int client_fd){
-  struct request *req = malloc(sizeof(struct request));
-  if (!req) {
-    fprintf(stderr, "Memory allocation failed\n");
-    exit(1);
-  }
-  if (recieve_request(client_fd, req)) {
+int handle_connection(struct connection* ptr){
+  int client_fd = ptr->fd;
+  struct request *req = ptr->req;
+  int recv = recieve_request(client_fd, ptr);
+  if(recv == -1) {
     free_req(req);
+    free_conn(ptr);
     return -1;  // EXIT the function on error
   }
-  printf("Request Path: %s\n", req->path);
-  /* respond to the request */
-  handle_request(req, client_fd);
+
+  // Request fully recieved.
+  if(recv == 1){
+    printf("Request Path: %s\n", req->path);
+    /* respond to the request */
+    handle_request(req, client_fd);
+    // clearing the request and assign the connection request with new reqest object
+    // so that it will use new request for the next request
+    free_conn(ptr);
+  }
 }
 
 int main() {
@@ -192,25 +199,36 @@ int main() {
     int num_fds = epoll_wait(epfd, polled_events, MAX_EVENTS, -1);
     
     for(int i = 0; i < num_fds; i++){
-      int current_fd = polled_events[i].data.fd;
-      if(current_fd == server_fd){
+      struct epoll_event current_event = polled_events[i];
+      if(current_event.data.fd == server_fd){
         client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
         if (client_fd == -1) {
           printf("Failed to connect to client: %s\n", strerror(errno));
         }
         printf("Client Connected %d\n", client_fd);
-        event.data.fd = client_fd;
-        event.events = EPOLLIN;
+
         make_socket_non_blocking(client_fd);
+        struct connection *conn = malloc(sizeof(struct connection));
+        conn->fd = client_fd;
+        conn->buffer_size = RECV_BUFFER_SIZE;
+        conn->buffer = malloc(conn->buffer_size);
+        conn->received = 0;
+        conn->req = malloc(sizeof(struct request));
+        memset(conn->req, 0, sizeof(struct request));
+        event.data.ptr = conn;
+        event.events = EPOLLIN;
+
         if(epoll_ctl(epfd, EPOLL_CTL_ADD, client_fd, &event) == -1){
           printf("Failed to add client fd %d to epoll: ", client_fd);
         }
       }else{
-        if(handle_connection(current_fd) == -1){
-          event.data.fd = current_fd;
-          event.events = EPOLLIN;
-          epoll_ctl(epfd, EPOLL_CTL_DEL, current_fd, &event);
-          close(current_fd);
+        struct connection* conn = current_event.data.ptr;
+        if(handle_connection(conn) == -1){
+          event.data.ptr = conn;
+          free(conn->req);
+          free(conn->buffer);
+          epoll_ctl(epfd, EPOLL_CTL_DEL, conn->fd, &event);
+          close(conn->fd);
         }
       }
     }
