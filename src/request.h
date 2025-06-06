@@ -1,5 +1,6 @@
 #ifndef REQUEST_H
 #define REQUEST_H
+#include <glib.h>
 
 struct request {
     char* method;
@@ -10,6 +11,8 @@ struct request {
     char *http_version;
     char *content;
     char *connection;
+    char *cookies;
+    GHashTable *headers;
 };
 
 struct connection {

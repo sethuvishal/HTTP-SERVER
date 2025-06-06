@@ -2,6 +2,7 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <fcntl.h>
+#include <glib.h>
 #include <stdio.h>
 #include <limits.h>
 #include <sys/epoll.h>

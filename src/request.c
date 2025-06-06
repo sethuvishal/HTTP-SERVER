@@ -1,3 +1,4 @@
+#include <glib.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +15,7 @@ void print_request(struct request *req) {
     printf("\t agent: %s\n", req->agent);
     printf("\t content: %s\n", req->content);
     printf("\t Connection: %s\n", req->connection);
+    printf("\t Cookies: %s\n", req->cookies);
 }
 
 void free_req(struct request *req) {
@@ -27,6 +29,7 @@ void free_req(struct request *req) {
       free(req->http_version);
     if (req->content)
       free(req->content);
+    g_hash_table_destroy(req->headers);
     free(req);
 }
 
@@ -61,6 +64,11 @@ int try_parse_field(char *buf, char *delim, char **out, int fnum) {
     free(buf_copy);
     return rc;
 }
+
+void print_header(gpointer key, gpointer value, gpointer user_data) {
+    (void)user_data;
+    printf("%s: %s\n", (char *)key, (char *)value);
+}
   
 int parse_request(char *buf, size_t buf_len, struct request *req) {
     // Find the end of headers (double CRLF)
@@ -88,6 +96,8 @@ int parse_request(char *buf, size_t buf_len, struct request *req) {
     req->http_version = tmp ? strdup(tmp) : NULL;
     if (!req->method || !req->path || !req->http_version) return -1;
 
+    req->headers = g_hash_table_new(g_str_hash, g_str_hash);
+
     // Parse headers
     while ((line = strtok_r(NULL, newline_char, &save_line))) {
         if (strncasecmp(line, "Host:", 5) == 0) {
@@ -98,6 +108,21 @@ int parse_request(char *buf, size_t buf_len, struct request *req) {
             req->content_length = atoi(line + 16);
         }else if(strncasecmp(line, "Connection:", 11) == 0){
           req->connection = strdup(line + 12);
+        }else if(strncasecmp(line, "Cookie:", 7) == 0){
+          req->cookies = strdup(line + 8);
+        }
+
+        // set all headers inside request headers
+        const char *delimiter = ": ";
+        char* headerLine = strdup(line);
+        // free(line);
+        char *pos = strstr(headerLine, delimiter);
+        if (pos) {
+            *pos = '\0';
+            char *key = headerLine;
+            // move past ": " in the request header
+            char *value = pos + strlen(delimiter);  
+            g_hash_table_insert(req->headers, key, value);
         }
     }
 
