@@ -92,7 +92,7 @@ void handle_request(struct request* req, int client_fd){
 
   if (strcmp(req->path, "/") == 0) {
     resp->status = R_HTTP_OK;
-    resp->content = "Example Response";
+    resp->content = strdup("Example Response");
     resp->type = CT_TEXT_PLAIN;
     send_response(client_fd, resp, req, NULL);
   } else if (strstr(req->path, "echo")) {
