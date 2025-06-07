@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/socket.h>
+
 #include "response.h"
 
 const char *server_status_responses[R_COUNT] = {

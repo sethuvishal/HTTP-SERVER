@@ -2,9 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "request.h"
 #include <errno.h>
+#include <sys/socket.h>
+
 #include "config.h"
+#include "request.h"
 
 
 void print_request(struct request *req) {
@@ -44,7 +46,7 @@ void free_conn(struct connection* conn){
   conn->buffer = malloc(conn->buffer_size);
 }
 
-int try_parse_field(char *buf, char *delim, char **out, int fnum) {
+int try_parse_field(char *buf, const char *delim, char **out, int fnum) {
     int token_count = 0, rc = 1;
     char *field;
     char *buf_copy = strdup(buf);
@@ -96,7 +98,7 @@ int parse_request(char *buf, size_t buf_len, struct request *req) {
     req->http_version = tmp ? strdup(tmp) : NULL;
     if (!req->method || !req->path || !req->http_version) return -1;
 
-    req->headers = g_hash_table_new(g_str_hash, g_str_hash);
+    req->headers = g_hash_table_new(g_str_hash, g_str_equal);
 
     // Parse headers
     while ((line = strtok_r(NULL, newline_char, &save_line))) {
@@ -130,7 +132,7 @@ int parse_request(char *buf, size_t buf_len, struct request *req) {
     size_t body_offset = headers_len;
     size_t remaining = buf_len - body_offset;
     if (req->content_length > 0) {
-        if (remaining < req->content_length) {
+        if ((int)remaining < req->content_length) {
             return -2; // Need more data
         }
         req->content = (char *)malloc(req->content_length + 1);
@@ -143,8 +145,6 @@ int parse_request(char *buf, size_t buf_len, struct request *req) {
 }
   
 int recieve_request(int client_fd, struct connection* conn) {
-    char *save_line, *line, *field;
-    int cntr;
     char *recv_buffer = conn->buffer;
     while (1) {
         // Grow buffer if needed

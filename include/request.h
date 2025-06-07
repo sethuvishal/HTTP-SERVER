@@ -33,5 +33,5 @@ int recieve_request(int, struct connection*);
 
 int parse_request(char *, size_t , struct request *);
 
-int try_parse_field(char *, char *, char **, int );
+int try_parse_field(char *, const char *, char **, int );
 #endif

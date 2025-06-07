@@ -1,13 +1,17 @@
-objects = build/request.o build/response.o build/main.o build/config.o build/utils.o
-CFLAGS = `pkg-config --cflags glib-2.0`
+objects = build/request.o build/response.o build/server.o build/config.o build/utils.o
+
+INCLUDES = -Iinclude
+CFLAGS = -Wall -Wextra -fPIC $(INCLUDES) `pkg-config --cflags glib-2.0`
 LDLIBS = `pkg-config --libs glib-2.0`
 
-all: $(objects)
-	cc $^ -o build/all $(LDLIBS)
+all: libhttpserver.so
 
-$(objects): build/%.o: src/%.c
-	echo $^
-	cc -c $^ -o $@ $(CFLAGS)
+libhttpserver.so: $(objects)
+	gcc -shared -o libhttpserver.so $(objects) $(LDLIBS)
+
+build/%.o: src/%.c
+	mkdir -p build
+	gcc $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f build/*
+	rm -f build/*.o libhttpserver.so
