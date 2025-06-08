@@ -89,11 +89,13 @@ int handle_connection(struct connection* ptr, struct response* (*handle_request)
     }
     /* respond to the request */
     handle_request(req, resp, client_fd);
+    int closeConnection = strcmp(req->connection, "close");
     free_req(req);
     free_resp(resp);
     // clearing the request and assign the connection request with new reqest object
     // so that it will use new request for the next request
     free_conn(ptr);
+    if(closeConnection == 0) return -1;
   }
   return 0;
 }
