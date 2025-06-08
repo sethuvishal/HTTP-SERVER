@@ -18,9 +18,11 @@ void handle_request(struct request* req, struct response* resp, int client_fd){
     resp->type = CT_TEXT_PLAIN;
     send_response(client_fd, resp, req, 0);
   } else if (strncmp(req->path, "/files/", 7) == 0) {
-    char* filename = strdup(req->path + strlen("/files/") );
-    printf("Filename: %s\n", filename);
-    resp = serve_file(client_fd, req, resp, filename);
+    char* filename = strdup(req->path + strlen("/files/"));
+    serve_file(client_fd, req, resp, filename);
+  }else if(strncmp(req->path, "/favicon", 8) == 0){
+    char* filename = strdup("./favicon.png");
+    serve_file(client_fd, req, resp, filename);
   }else {
     resp->status = R_NOT_FOUND;
     resp->content = strdup("Not Found");

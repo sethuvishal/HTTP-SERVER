@@ -67,7 +67,7 @@ struct response* serve_file(int client_fd, struct request* req, struct response*
   return resp;
 }
 
-int handle_connection(struct connection* ptr, struct response* (*handle_request)(struct request*, struct response*, int fd)){
+int handle_connection(struct connection* ptr, void (*handle_request)(struct request*, struct response*, int fd)){
   int client_fd = ptr->fd;
   struct request *req = ptr->req;
   int recv = recieve_request(client_fd, ptr);
@@ -100,7 +100,7 @@ int handle_connection(struct connection* ptr, struct response* (*handle_request)
   return 0;
 }
 
-int start_server(int port, struct response* (*handle_request)(struct request*, struct response*, int fd)){
+int start_server(int port, void (*handle_request)(struct request*, struct response*, int fd)){
   // Disable output buffering
   setbuf(stdout, NULL);
   // You can use print statements as follows for debugging, they'll be visible

@@ -4,6 +4,6 @@
 #include "request.h"
 #include "response.h"
 
-void start_server(int port, struct response* (*handle_request)(struct request*, int fd));
+int start_server(int port, void (*handle_request)(struct request*, struct response*, int fd));
 
 #endif
