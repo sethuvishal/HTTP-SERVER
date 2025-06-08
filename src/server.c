@@ -22,31 +22,12 @@ void make_socket_non_blocking(int fd) {
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-struct response* echo_handler(struct request* req){
-  char *random_string = NULL, *echo = NULL;
-  struct response* resp = malloc(sizeof(struct response));
-  if (try_parse_field(req->path, slash_char, &echo, 1) ||
-    try_parse_field(req->path, slash_char, &random_string, 2) ||
-    strcmp(echo, "echo") != 0) {
-    resp->status = R_NOT_FOUND;
-  } else {
-  resp->status = R_HTTP_OK;
-  resp->content = random_string;
-  resp->type = CT_TEXT_PLAIN;
-  }
-  if (echo) free(echo);
-  if (resp->status != R_HTTP_OK && random_string)
-    free(random_string);
-  return resp;
-}
-
-struct response* serve_file(int client_fd, struct request* req, char* pathname){
-  struct response* resp = malloc(sizeof(struct response));
-
+struct response* serve_file(int client_fd, struct request* req, struct response* resp, char* pathname){
   if(pathname == NULL){
     resp->status = R_NOT_FOUND;
     resp->content = "Request File Not Found";
     resp->type = CT_TEXT_PLAIN;
+    send_response(client_fd, resp, req, 0);
     return resp;
   }
   char cwd[PATH_MAX];
@@ -56,6 +37,7 @@ struct response* serve_file(int client_fd, struct request* req, char* pathname){
     resp->status = R_NOT_FOUND;
     resp->content = strdup("Something went wrong!");
     resp->type = CT_TEXT_PLAIN;
+    send_response(client_fd, resp, req, 0);
     return resp;
   }
   snprintf(fullpath, sizeof(fullpath), "%s/%s", cwd, pathname);
@@ -64,12 +46,14 @@ struct response* serve_file(int client_fd, struct request* req, char* pathname){
       resp->status = R_NOT_FOUND;
       resp->content = strdup("File not found");
       resp->type = CT_TEXT_PLAIN;
+      send_response(client_fd, resp, req, 0);
       return resp;
   }
 
   FILE *fp = fopen(fullpath, "r");
   fseek(fp, 0, SEEK_END);
   long filesize = ftell(fp);
+  fclose(fp);
   resp->status = R_HTTP_OK;
   const char* file_ext = get_file_extension(pathname);
   content_type_e content_type = get_content_type(file_ext);
@@ -77,12 +61,13 @@ struct response* serve_file(int client_fd, struct request* req, char* pathname){
   resp->has_content_length = 1;
   resp->content_length = filesize;
   resp->content = NULL;
-  send_response(client_fd, resp, req, fileno(fp));
+  int file_fd = open(fullpath, O_RDONLY);
+  send_response(client_fd, resp, req, file_fd);
 
   return resp;
 }
 
-int handle_connection(struct connection* ptr, struct response* (*handle_request)(struct request*, int fd)){
+int handle_connection(struct connection* ptr, struct response* (*handle_request)(struct request*, struct response*, int fd)){
   int client_fd = ptr->fd;
   struct request *req = ptr->req;
   int recv = recieve_request(client_fd, ptr);
@@ -95,8 +80,17 @@ int handle_connection(struct connection* ptr, struct response* (*handle_request)
   // Request fully recieved.
   if(recv == 1){
     printf("Request Path: %s\n", req->path);
+    struct response *resp = malloc(sizeof(struct response));
+    memset(resp, 0, sizeof(struct response));
+    if (!resp) {
+      fprintf(stderr, "Memory allocation failed\n");
+      free_req(req);
+      return -1;
+    }
     /* respond to the request */
-    handle_request(req, client_fd);
+    handle_request(req, resp, client_fd);
+    free_req(req);
+    free_resp(resp);
     // clearing the request and assign the connection request with new reqest object
     // so that it will use new request for the next request
     free_conn(ptr);
@@ -104,7 +98,7 @@ int handle_connection(struct connection* ptr, struct response* (*handle_request)
   return 0;
 }
 
-int start_server(int port, struct response* (*handle_request)(struct request*, int fd)){
+int start_server(int port, struct response* (*handle_request)(struct request*, struct response*, int fd)){
   // Disable output buffering
   setbuf(stdout, NULL);
   // You can use print statements as follows for debugging, they'll be visible
